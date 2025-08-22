@@ -3,22 +3,86 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Facebook GUI</title>
-  <link rel="stylesheet" href="style.css">
+  <title>Facebook Profile GUI</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      background-color: #f0f2f5;
+    }
+
+    /* Navbar */
+    .navbar {
+      background-color: #1877f2;
+      padding: 10px 20px;
+      color: white;
+      display: flex;
+      align-items: center;
+    }
+    .navbar h1 {
+      margin: 0;
+      font-size: 24px;
+    }
+
+    /* Profile header */
+    .profile-header {
+      background-color: white;
+      padding: 20px;
+      display: flex;
+      align-items: center;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    .profile-header img {
+      width: 100px;
+      height: 100px;
+      border-radius: 50%;
+      margin-right: 20px;
+    }
+    .profile-header h2 {
+      margin: 0;
+    }
+
+    /* Posts */
+    .posts {
+      padding: 20px;
+    }
+    .post {
+      background-color: white;
+      padding: 15px;
+      margin-bottom: 20px;
+      border-radius: 10px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    .post h3 {
+      margin: 0 0 10px 0;
+    }
+  </style>
 </head>
 <body>
-  <div class="login-container">
-    <div class="login-box">
-      <h1>Facebook</h1>
-      <input type="text" placeholder="อีเมลหรือเบอร์โทรศัพท์">
-      <input type="password" placeholder="รหัสผ่าน">
-      <button onclick="login()">เข้าสู่ระบบ</button>
-      <a href="#">ลืมรหัสผ่าน?</a>
-      <hr>
-      <button class="signup">สร้างบัญชีใหม่</button>
+  <!-- Navbar -->
+  <div class="navbar">
+    <h1>Facebook</h1>
+  </div>
+
+  <!-- Profile Header -->
+  <div class="profile-header">
+    <img src="https://via.placeholder.com/100" alt="Profile Picture">
+    <div>
+      <h2>ชื่อผู้ใช้ ตัวอย่าง</h2>
+      <p>Friends: 200 | Posts: 15</p>
     </div>
   </div>
 
-  <script src="script.js"></script>
+  <!-- Posts -->
+  <div class="posts">
+    <div class="post">
+      <h3>โพสต์ล่าสุด</h3>
+      <p>นี่คือโพสต์ตัวอย่างบน Facebook GUI ของคุณ</p>
+    </div>
+    <div class="post">
+      <h3>โพสต์ที่สอง</h3>
+      <p>โพสต์นี้เป็นตัวอย่างเพื่อจำลอง timeline</p>
+    </div>
+  </div>
 </body>
 </html>
