@@ -65,11 +65,6 @@
       });
     }
 
-    function selectMenu(index) {
-      const url = buttons[index].dataset.link;
-      window.open(url, "_blank"); // เปิดลิงก์ในแท็บใหม่
-    }
-
     document.addEventListener('keydown', (e) => {
       if (e.key === "ArrowUp") {
         currentIndex = (currentIndex - 1 + buttons.length) % buttons.length;
