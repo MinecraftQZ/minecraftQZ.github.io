@@ -334,6 +334,12 @@
         findOverlay.classList.remove('show'); helpOverlay.classList.remove('show'); replaceOverlay.classList.remove('show');
       }
     });
+    // Ctrl+Shift+O เปิดไฟล์
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'o') {
+        e.preventDefault();
+        openFile();
+      }
+
 
     // overlay buttons
     findNextBtn.addEventListener('click', findNext);
