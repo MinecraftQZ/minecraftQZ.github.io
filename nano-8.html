@@ -154,6 +154,21 @@
   </div>
 
   <input type="file" id="filePicker" style="display:none" />
+ <div class="menubar">
+  <button onclick="newFile()">New</button>
+  <button onclick="showOpenMenu()">Open</button>
+  <button onclick="saveCurrentFile()">Save</button>
+ </div>
+  <div class="overlay" id="openOverlay">
+  <div class="panel">
+    <header>Open File</header>
+    <div class="content" id="fileList"></div>
+    <div class="actions">
+      <button class="btn" onclick="closeOpenMenu()">Cancel</button>
+    </div>
+  </div>
+</div>
+
 
   <script>
   (function(){
@@ -188,6 +203,65 @@
     function setDirty(v){ dirty=v; dirtyFlag.textContent = v ? '*modified*' : ''; }
     function setName(name){ filename = name; title.textContent = '— ' + name; modelineName.textContent = '[' + ' ' + name + ' ' + ']'; }
     function showFlash(msg){ flash.textContent=msg; flash.classList.add('show'); setTimeout(()=>flash.classList.remove('show'), 900); }
+// ใช้ localStorage เก็บไฟล์
+function saveFileToLocal(name, content) {
+  const now = new Date().toLocaleString();
+  localStorage.setItem("file_" + name, JSON.stringify({
+    name: name,
+    content: content,
+    savedAt: now
+  }));
+  showFlash("บันทึกแล้ว ✓ " + name);
+}
+    function showOpenMenu() {
+  const listDiv = document.getElementById("fileList");
+  listDiv.innerHTML = "";
+  const files = loadFileList();
+  if (files.length === 0) {
+    listDiv.innerHTML = "<p>ยังไม่มีไฟล์ที่บันทึก</p>";
+  } else {
+    files.forEach(f => {
+      const btn = document.createElement("button");
+      btn.className = "btn";
+      btn.textContent = f.name + " (บันทึกเมื่อ " + f.savedAt + ")";
+      btn.onclick = () => {
+        openFileFromLocal(f.name);
+        closeOpenMenu();
+      };
+      listDiv.appendChild(btn);
+    });
+  }
+  document.getElementById("openOverlay").classList.add("show");
+}
+
+function closeOpenMenu() {
+  document.getElementById("openOverlay").classList.remove("show");
+}
+
+
+function loadFileList() {
+  let files = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (key.startsWith("file_")) {
+      const data = JSON.parse(localStorage.getItem(key));
+      files.push(data);
+    }
+  }
+  return files;
+}
+
+function openFileFromLocal(name) {
+  const data = JSON.parse(localStorage.getItem("file_" + name));
+  if (data) {
+    editor.value = data.content;
+    setName(data.name);
+    setDirty(false);
+    updateGutter();
+    updateCursor();
+    showFlash("เปิดไฟล์แล้ว: " + name);
+  }
+}
 
     function updateGutter(){
       const lines = editor.value.split(/\n/).length; // simple count
