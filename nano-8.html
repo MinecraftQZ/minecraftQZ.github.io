@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>nano 8.5 — HTML Edition</title>
+  <style>
+    :root{
+      --bg: #101215;
+      --bg-soft: #15181c;
+      --fg: #d1d5db;
+      --muted: #9ca3af;
+      --accent: #22c55e;  /* green */
+      --warning: #f59e0b; /* amber */
+      --error: #ef4444;   /* red */
+      --blue: #60a5fa;
+      --border: #22262b;
+      --shadow: 0 10px 25px rgba(0,0,0,.35);
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0; background:var(--bg); color:var(--fg); font:15px/1.5 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    }
+    .app{display:grid; grid-template-rows:auto 1fr auto; height:100%;}
+    .topbar{
+      display:flex; align-items:center; gap:.75rem; padding:.5rem .75rem; background:var(--bg-soft); border-bottom:1px solid var(--border);
+    }
+    .dot{width:.7rem; height:.7rem; border-radius:50%; display:inline-block}
+    .dot.red{background:#ff5f56}.dot.yellow{background:#ffbd2e}.dot.green{background:#27c93f}
+    .title{margin-left:.25rem; color:var(--muted)}
+    .status{margin-left:auto; color:var(--muted); font-size:13px}
+    .editor-wrap{position:relative}
+    textarea{
+      width:100%; height:100%; padding:1rem 1rem 2.5rem; border:0; outline:none; resize:none; background:transparent; color:var(--fg); caret-color:#a7f3d0; font:inherit; tab-size:2; white-space:pre; overflow:auto;
+    }
+    .gutter{position:absolute; inset:0 auto 0 0; width:56px; background:transparent; color:#6b7280; pointer-events:none; padding:1rem .5rem 2.5rem; text-align:right; border-right:1px solid var(--border);}
+    .with-gutter textarea{padding-left:70px}
+    .modeline{
+      display:flex; gap:1rem; align-items:center; padding:.4rem .6rem; background:var(--bg-soft); color:#e5e7eb; border-top:1px solid var(--border); box-shadow:var(--shadow);
+      position:relative;
+    }
+    .modeline .name{color:#e5e7eb}
+    .modeline .dirty{color:var(--warning)}
+    .keybar{
+      display:grid; grid-template-columns:repeat(6,1fr); gap:.4rem; padding:.35rem .6rem .6rem; background:#0b0d10; border-top:1px solid var(--border); color:#cbd5e1; font-size:13px;
+    }
+    .key{display:flex; gap:.35rem; align-items:center; white-space:nowrap}
+    kbd{border:1px solid #2b3138; background:#111418; border-radius:4px; padding:.05rem .35rem; font-size:12px; color:#e5e7eb}
+    .badge{font-size:12px; color:#9ca3af}
+    .flash{position:absolute; inset:auto .75rem 2.5rem auto; padding:.25rem .5rem; border-radius:6px; background:#0b0d10; border:1px solid #26313a; color:#e5e7eb; opacity:0; transition:opacity .25s ease}
+    .flash.show{opacity:1}
+
+    .overlay{position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.45);}
+    .overlay.show{display:flex}
+    .panel{width:min(680px,92vw); background:#0b0d10; border:1px solid #2b3138; border-radius:12px; box-shadow:var(--shadow);}
+    .panel header{padding:.85rem 1rem; border-bottom:1px solid #2b3138; color:#e5e7eb; font-weight:600}
+    .panel .content{padding:1rem}
+    .panel .row{display:flex; gap:.5rem; align-items:center}
+    .panel input[type="text"]{width:100%; padding:.6rem .7rem; background:#0f1318; border:1px solid #2b3138; border-radius:8px; color:#e5e7eb}
+    .panel .actions{display:flex; gap:.5rem; justify-content:flex-end; margin-top:.8rem}
+    .btn{padding:.5rem .7rem; border-radius:8px; border:1px solid #2b3138; background:#0f1318; color:#e5e7eb; cursor:pointer}
+    .btn.primary{background:#1a2a1f; border-color:#21412d; color:#bbf7d0}
+    .hint{color:#9ca3af; font-size:12px; margin-top:.35rem}
+    .help-grid{display:grid; grid-template-columns:1fr 1fr; gap:1rem; font-size:14px}
+    .help-grid code{background:#0f1318; border:1px solid #2b3138; padding:.1rem .35rem; border-radius:6px}
+    a.link{color:var(--blue); text-decoration:none}
+  </style>
+</head>
+<body>
+  <div class="app with-gutter" id="app">
+    <div class="topbar">
+      <span class="dot red"></span><span class="dot yellow"></span><span class="dot green"></span>
+      <strong>GNU nano 8.5 (HTML)</strong>
+      <span class="title" id="title">— New Buffer</span>
+      <span class="status" id="cursorStatus">Ln 1, Col 1  |  UTF-8  |  Unix (LF)</span>
+    </div>
+    <div class="editor-wrap">
+      <div class="gutter" id="gutter"></div>
+      <textarea id="editor" spellcheck="false" placeholder="พิมพ์ข้อความของคุณที่นี่…"></textarea>
+      <div class="flash" id="flash"></div>
+    </div>
+    <div class="modeline">
+      <span class="name" id="modelineName">[ New Buffer ]</span>
+      <span class="dirty" id="dirtyFlag"></span>
+      <span class="badge" id="fileInfo"></span>
+    </div>
+    <div class="keybar">
+      <div class="key"><kbd>Ctrl</kbd>+<kbd>S</kbd> WriteOut</div>
+      <div class="key"><kbd>Ctrl</kbd>+<kbd>O</kbd> Open</div>
+      <div class="key"><kbd>Ctrl</kbd>+<kbd>W</kbd> WhereIs</div>
+      <div class="key"><kbd>Ctrl</kbd>+<kbd>X</kbd> Exit</div>
+      <div class="key"><kbd>Ctrl</kbd>+<kbd>G</kbd> Help</div>
+      <div class="key"><kbd>Ctrl</kbd>+<kbd>\</kbd> Replace</div>
+    </div>
+  </div>
+
+  <!-- Search / Replace Overlay -->
+  <div class="overlay" id="findOverlay">
+    <div class="panel">
+      <header>ค้นหา (Where Is)</header>
+      <div class="content">
+        <div class="row">
+          <input type="text" id="findInput" placeholder="พิมพ์คำที่ต้องการค้นหา" />
+          <button class="btn primary" id="findNextBtn">Find Next</button>
+        </div>
+        <div class="hint">ปุ่มลัด: <code>Enter</code> = Next, <code>Esc</code> = ปิด</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Help Overlay -->
+  <div class="overlay" id="helpOverlay">
+    <div class="panel">
+      <header>ช่วยเหลือ — nano 8.5 (HTML)</header>
+      <div class="content">
+        <p>นี่คือเวอร์ชันจำลองของ <strong>GNU nano 8.5</strong> ที่ทำงานในเบราว์เซอร์. ปุ่มลัดบางอย่างปรับให้เหมาะกับเบราว์เซอร์:</p>
+        <div class="help-grid">
+          <div>
+            <p><code>Ctrl+S</code> — บันทึก (Write Out)</p>
+            <p><code>Ctrl+O</code> — เปิดไฟล์ (อาจถูกเบราว์เซอร์กันไว้ในบางเครื่อง)</p>
+            <p><code>Ctrl+W</code> — ค้นหา (Where Is)</p>
+          </div>
+          <div>
+            <p><code>Ctrl+X</code> — ออก (Exit) — จะถามให้บันทึกถ้ามีการแก้ไข</p>
+            <p><code>Ctrl+\</code> — ค้นหา/แทนที่ (Replace)</p>
+            <p><code>Ctrl+G</code> — หน้าช่วยเหลือนี้</p>
+          </div>
+        </div>
+        <p class="hint">ถ้ามี <em>File System Access API</em> เบราว์เซอร์จะบันทึกลงไฟล์เดิมได้โดยตรง. ถ้าไม่มีก็จะดาวน์โหลดไฟล์แทน.</p>
+        <div class="actions"><button class="btn primary" id="closeHelp">ปิด</button></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Replace Overlay -->
+  <div class="overlay" id="replaceOverlay">
+    <div class="panel">
+      <header>ค้นหา & แทนที่</header>
+      <div class="content">
+        <div class="row" style="margin-bottom:.5rem">
+          <input type="text" id="repFind" placeholder="ค้นหาอะไร" />
+        </div>
+        <div class="row">
+          <input type="text" id="repWith" placeholder="แทนที่ด้วย" />
+        </div>
+        <div class="actions">
+          <button class="btn" id="repOnce">แทนที่ครั้งเดียว</button>
+          <button class="btn primary" id="repAll">แทนที่ทั้งหมด</button>
+          <button class="btn" id="repCancel">ยกเลิก</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <input type="file" id="filePicker" style="display:none" />
+
+  <script>
+  (function(){
+    const el = (id)=>document.getElementById(id);
+    const editor = el('editor');
+    const gutter = el('gutter');
+    const title = el('title');
+    const modelineName = el('modelineName');
+    const dirtyFlag = el('dirtyFlag');
+    const fileInfo = el('fileInfo');
+    const flash = el('flash');
+    const findOverlay = el('findOverlay');
+    const findInput = el('findInput');
+    const findNextBtn = el('findNextBtn');
+    const helpOverlay = el('helpOverlay');
+    const closeHelp = el('closeHelp');
+    const replaceOverlay = el('replaceOverlay');
+    const repFind = el('repFind');
+    const repWith = el('repWith');
+    const repOnce = el('repOnce');
+    const repAll = el('repAll');
+    const repCancel = el('repCancel');
+    const filePicker = el('filePicker');
+    const cursorStatus = el('cursorStatus');
+
+    let fileHandle = null;
+    let filename = 'New Buffer';
+    let dirty = false;
+    let lastFind = '';
+
+    // Utility
+    function setDirty(v){ dirty=v; dirtyFlag.textContent = v ? '*modified*' : ''; }
+    function setName(name){ filename = name; title.textContent = '— ' + name; modelineName.textContent = '[' + ' ' + name + ' ' + ']'; }
+    function showFlash(msg){ flash.textContent=msg; flash.classList.add('show'); setTimeout(()=>flash.classList.remove('show'), 900); }
+
+    function updateGutter(){
+      const lines = editor.value.split(/\n/).length; // simple count
+      let s=''; for(let i=1;i<=lines;i++){ s += (''+i).padStart(3,' ')+'\n'; }
+      gutter.textContent = s;
+    }
+
+    function updateCursor(){
+      const pos = editor.selectionStart;
+      const before = editor.value.slice(0,pos);
+      const line = (before.match(/\n/g)||[]).length + 1;
+      const col = pos - (before.lastIndexOf('\n')+1);
+      cursorStatus.textContent = `Ln ${line}, Col ${col+1}  |  UTF-8  |  Unix (LF)`;
+    }
+
+    function saveBlobDownload(name, text){
+      const blob = new Blob([text], {type:'text/plain;charset=utf-8'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = name; a.click();
+      setTimeout(()=>URL.revokeObjectURL(url), 1000);
+    }
+
+    async function writeOut(){
+      try{
+        if(window.showSaveFilePicker && !fileHandle){
+          fileHandle = await showSaveFilePicker({suggestedName: filename.endsWith('.txt')?filename:filename+'.txt', types:[{description:'Text', accept:{'text/plain':['.txt','.md','.log','.*']}}]});
+        }
+        if(fileHandle){
+          const writable = await fileHandle.createWritable();
+          await writable.write(editor.value);
+          await writable.close();
+          setDirty(false);
+          setName(fileHandle.name || filename);
+          showFlash('บันทึกแล้ว ✓');
+        } else {
+          saveBlobDownload(filename.replace(/\s+/g,'_')+'.txt', editor.value);
+          setDirty(false); showFlash('ดาวน์โหลดไฟล์แล้ว ✓');
+        }
+      }catch(err){ console.warn(err); showFlash('บันทึกไม่สำเร็จ'); }
+    }
+
+    async function openFile(){
+      try{
+        if(window.showOpenFilePicker){
+          const [handle] = await showOpenFilePicker({types:[{description:'Text', accept:{'text/plain':['.txt','.md','.log','.*']}}]});
+          if(handle){ fileHandle = handle; const file = await handle.getFile(); const text = await file.text(); editor.value = text; setName(handle.name); setDirty(false); updateGutter(); updateCursor(); showFlash('เปิดไฟล์แล้ว'); }
+        }else{
+          filePicker.click();
+        }
+      }catch(err){ console.warn(err); showFlash('ยกเลิกการเปิดไฟล์'); }
+    }
+
+    filePicker.addEventListener('change', async (e)=>{
+      const f = e.target.files[0]; if(!f) return; const text = await f.text(); editor.value = text; setName(f.name); setDirty(false); updateGutter(); updateCursor(); showFlash('เปิดไฟล์แล้ว');
+    });
+
+    function findNext(){
+      const q = findInput.value || lastFind; if(!q) return; lastFind = q;
+      const start = editor.selectionEnd;
+      const idx = editor.value.indexOf(q, start);
+      const wrapIdx = editor.value.indexOf(q, 0);
+      let pos = -1;
+      if(idx !== -1){ pos = idx; }
+      else if(wrapIdx !== -1){ pos = wrapIdx; showFlash('วนกลับจุดเริ่มต้น'); }
+      if(pos !== -1){
+        editor.focus();
+        editor.selectionStart = pos; editor.selectionEnd = pos + q.length;
+        updateCursor();
+      } else {
+        showFlash('ไม่พบ "'+q+'"');
+      }
+    }
+
+    function replaceOnce(find, withStr){
+      if(!find) return;
+      const {selectionStart:s, selectionEnd:e} = editor;
+      const selected = editor.value.slice(s,e);
+      if(selected === find){
+        editor.setRangeText(withStr, s, e, 'end');
+        setDirty(true); updateGutter(); updateCursor();
+        return true;
+      } else {
+        // jump to next occurrence first
+        const from = e; const idx = editor.value.indexOf(find, from);
+        if(idx !== -1){ editor.selectionStart = idx; editor.selectionEnd = idx + find.length; updateCursor(); }
+        return false;
+      }
+    }
+
+    function replaceAll(find, withStr){
+      if(!find) return; const re = new RegExp(find.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'g');
+      const before = editor.value; editor.value = before.replace(re, withStr);
+      setDirty(true); updateGutter(); updateCursor(); showFlash('แทนที่ทั้งหมดแล้ว');
+    }
+
+    // events
+    editor.addEventListener('input', ()=>{ setDirty(true); updateGutter(); updateCursor(); });
+    editor.addEventListener('click', updateCursor);
+    editor.addEventListener('keyup', updateCursor);
+
+    window.addEventListener('beforeunload', (e)=>{
+      if(dirty){ e.preventDefault(); e.returnValue = ''; }
+    });
+
+    document.addEventListener('keydown', (e)=>{
+      // Prevent default for keys we want to handle
+      if((e.ctrlKey||e.metaKey) && ['s','o','w','x','g','\\'].includes(e.key.toLowerCase())){
+        e.preventDefault();
+      }
+      // Ctrl+S WriteOut
+      if((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='s'){
+        writeOut();
+      }
+      // Ctrl+O Open
+      if((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='o'){
+        openFile();
+      }
+      // Ctrl+W Where Is
+      if((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='w'){
+        findOverlay.classList.add('show');
+        setTimeout(()=>findInput.focus(), 50);
+      }
+      // Ctrl+X Exit
+      if((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='x'){
+        if(dirty){
+          const ok = confirm('มีการแก้ไขที่ยังไม่บันทึก — ต้องการบันทึกก่อนออกไหม?');
+          if(ok){ writeOut(); }
+        }
+        // Clear buffer (simulate exit/new)
+        editor.value=''; setName('New Buffer'); setDirty(false); updateGutter(); updateCursor();
+      }
+      // Ctrl+G Help
+      if((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='g'){
+        helpOverlay.classList.add('show');
+      }
+      // Ctrl+\ Replace
+      if((e.ctrlKey||e.metaKey) && e.key==='\\'){
+        replaceOverlay.classList.add('show'); setTimeout(()=>repFind.focus(),50);
+      }
+      // Enter in overlays
+      if(e.key==='Enter' && findOverlay.classList.contains('show')){ e.preventDefault(); findNext(); }
+      if(e.key==='Escape'){
+        findOverlay.classList.remove('show'); helpOverlay.classList.remove('show'); replaceOverlay.classList.remove('show');
+      }
+    });
+
+    // overlay buttons
+    findNextBtn.addEventListener('click', findNext);
+    closeHelp.addEventListener('click', ()=>helpOverlay.classList.remove('show'));
+    repCancel.addEventListener('click', ()=>replaceOverlay.classList.remove('show'));
+    repOnce.addEventListener('click', ()=>{ if(replaceOnce(repFind.value, repWith.value)){ showFlash('แทนที่แล้ว'); } });
+    repAll.addEventListener('click', ()=> replaceAll(repFind.value, repWith.value));
+
+    // init
+    setName('New Buffer');
+    updateGutter();
+    updateCursor();
+    editor.focus();
+  })();
+  </script>
+</body>
+</html>
