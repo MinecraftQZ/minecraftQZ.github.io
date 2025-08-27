@@ -1,0 +1,426 @@
+/*
+Minecraft Server Host UI (single-file React component)
+Features:
+- Create/manage multiple "servers" (stored in localStorage)
+- Start/Stop simulation, Console output (simulated logs)
+- Basic file editor, config editor, backups list
+- Queue simulation when starting servers (like Aternos)
+- Persistence: servers persist across reloads via localStorage
+
+How to use:
+1. Create a React project (Vite or Create React App).
+2. Install Tailwind CSS (optional but this code uses Tailwind classes).
+3. Paste this component into a file (e.g. src/App.jsx) and import into index.
+
+Notes/Next steps for production:
+- Replace simulated operations with real backend APIs (start/stop server, allocate port, manage files, schedule in queue).
+- Implement authentication, rate limits, sandboxed file storage, and server orchestration (Docker/Kubernetes, systemd, or a managed hosting API).
+- Secure console websockets for real-time logs.
+
+-----
+This single-file component aims to be a working UI prototype. It does NOT start real Minecraft servers.
+*/
+
+import React, { useEffect, useState, useRef } from "react";
+
+export default function App() {
+  // Data model for a server
+  const sampleServer = () => ({
+    id: cryptoRandomId(),
+    name: "New Server",
+    version: "1.20.4",
+    ram: 1024,
+    status: "stopped", // stopped | queued | starting | running | error
+    createdAt: Date.now(),
+    port: null,
+    console: [],
+    files: { "server.properties": defaultServerProperties() },
+    backups: [],
+  });
+
+  const [servers, setServers] = useState(() => loadServers());
+  const [selected, setSelected] = useState(servers[0]?.id ?? null);
+  const [creating, setCreating] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [queue, setQueue] = useState([]); // server ids in queue
+  const [nowTick, setNowTick] = useState(0);
+
+  // Persist to localStorage on change
+  useEffect(() => saveServers(servers), [servers]);
+
+  // Simple tick to simulate console/logs and queue progress
+  useEffect(() => {
+    const t = setInterval(() => setNowTick((s) => s + 1), 1200);
+    return () => clearInterval(t);
+  }, []);
+
+  useEffect(() => {
+    // Advance queue: if any queued servers and less than concurrency, start one
+    if (queue.length === 0) return;
+    const runningCount = servers.filter((s) => s.status === "running").length;
+    const concurrency = 2; // simulate two servers can run concurrently
+    if (runningCount >= concurrency) return;
+
+    const nextId = queue[0];
+    startServerInternal(nextId);
+    setQueue((q) => q.slice(1));
+  }, [nowTick]);
+
+  function createServer() {
+    const s = sampleServer();
+    s.name = newName || "Server " + (servers.length + 1);
+    setServers((arr) => [s, ...arr]);
+    setNewName("");
+    setCreating(false);
+    setSelected(s.id);
+  }
+
+  function removeServer(id) {
+    setServers((arr) => arr.filter((x) => x.id !== id));
+    if (selected === id) setSelected(null);
+  }
+
+  function toggleStartStop(id) {
+    const s = servers.find((x) => x.id === id);
+    if (!s) return;
+    if (s.status === "running" || s.status === "starting") {
+      // Stop
+      updateServer(id, { status: "stopped", console: [...s.console, logLine("Server stopped by user")] });
+    } else if (s.status === "queued") {
+      // cancel from queue
+      setQueue((q) => q.filter((x) => x !== id));
+      updateServer(id, { status: "stopped", console: [...s.console, logLine("Queue cancelled") ] });
+    } else {
+      // Put in queue
+      updateServer(id, { status: "queued", console: [...s.console, logLine("Added to start queue") ] });
+      setQueue((q) => [...q, id]);
+    }
+  }
+
+  function startServerInternal(id) {
+    // Simulate the starting process with logs and then running status
+    updateServer(id, { status: "starting", port: assignPort(), console: (servers.find(s=>s.id===id)?.console ?? []).concat(logLine("Allocating resources...")) });
+    // After few ticks, become running
+    setTimeout(() => {
+      updateServer(id, { status: "running", console: (servers.find(s=>s.id===id)?.console ?? []).concat(logLine("Server started successfully")) });
+    }, 2500 + Math.random() * 2000);
+  }
+
+  function saveFile(serverId, filename, content) {
+    const s = servers.find((x) => x.id === serverId);
+    if (!s) return;
+    const files = { ...s.files, [filename]: content };
+    updateServer(serverId, { files, console: [...s.console, logLine(`Saved file ${filename}`)] });
+  }
+
+  function createBackup(serverId) {
+    const s = servers.find((x) => x.id === serverId);
+    if (!s) return;
+    const snap = { id: cryptoRandomId(), createdAt: Date.now(), files: { ...s.files } };
+    updateServer(serverId, { backups: [snap, ...s.backups], console: [...s.console, logLine("Backup created")] });
+  }
+
+  function restoreBackup(serverId, backupId) {
+    const s = servers.find((x) => x.id === serverId);
+    if (!s) return;
+    const b = s.backups.find((bb) => bb.id === backupId);
+    if (!b) return;
+    updateServer(serverId, { files: { ...b.files }, console: [...s.console, logLine("Backup restored") ] });
+  }
+
+  function downloadBackup(serverId, backupId) {
+    // creates a blob and triggers download
+    const s = servers.find((x) => x.id === serverId);
+    if (!s) return;
+    const b = s.backups.find((bb) => bb.id === backupId);
+    if (!b) return;
+    const text = JSON.stringify(b, null, 2);
+    const blob = new Blob([text], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${s.name}-backup-${new Date(b.createdAt).toISOString()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function sendConsoleCommand(serverId, cmd) {
+    const s = servers.find((x) => x.id === serverId);
+    if (!s) return;
+    const line = `> ${cmd}`;
+    updateServer(serverId, { console: [...s.console, logLine(line), logLine(`(sim) Executed command: ${cmd}`) ] });
+  }
+
+  function updateServer(id, patch) {
+    setServers((arr) => arr.map((s) => (s.id === id ? { ...s, ...patch } : s)));
+  }
+
+  // UI bits
+  const selectedServer = servers.find((s) => s.id === selected);
+
+  return (
+    <div className="min-h-screen bg-slate-50 p-6">
+      <div className="max-w-6xl mx-auto">
+        <header className="flex items-center justify-between mb-6">
+          <h1 className="text-2xl font-semibold">Mini Aternos — Prototype</h1>
+          <div className="text-sm text-slate-600">Local demo · No real servers</div>
+        </header>
+
+        <div className="grid grid-cols-12 gap-6">
+          <aside className="col-span-4 bg-white rounded-2xl p-4 shadow-sm">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="font-medium">Your Servers</h2>
+              <button
+                className="text-sm px-3 py-1 bg-emerald-500 text-white rounded-md"
+                onClick={() => setCreating(true)}>
+                + Create
+              </button>
+            </div>
+
+            <div className="space-y-3 max-h-[60vh] overflow-auto pr-2">
+              {servers.length === 0 && (
+                <div className="text-sm text-slate-500">You have no servers. Create one.</div>
+              )}
+              {servers.map((s) => (
+                <div key={s.id} className={`p-3 rounded-xl border ${s.id === selected ? 'border-indigo-300' : 'border-slate-100'} flex items-start justify-between`}>
+                  <div onClick={() => setSelected(s.id)} className="cursor-pointer">
+                    <div className="font-medium">{s.name}</div>
+                    <div className="text-xs text-slate-500">{s.version} · {s.ram} MB</div>
+                    <div className="text-xs mt-1">
+                      <span className={`px-2 py-0.5 rounded-full text-[11px] ${statusColor(s.status)}`}>{s.status}</span>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col items-end gap-2">
+                    <button className="text-xs px-2 py-1 rounded-md border" onClick={() => toggleStartStop(s.id)}>
+                      {s.status === 'running' || s.status === 'starting' ? 'Stop' : s.status === 'queued' ? 'Cancel' : 'Start'}
+                    </button>
+                    <button title="Delete" className="text-xs text-red-500" onClick={() => removeServer(s.id)}>🗑️</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-4">
+              <h3 className="text-xs text-slate-500">Queue</h3>
+              <div className="text-sm text-slate-700">{queue.length} queued</div>
+              <div className="mt-2 space-y-1 text-xs">
+                {queue.map((id, idx) => {
+                  const s = servers.find((x) => x.id === id);
+                  return <div key={id} className="flex justify-between"><div>{idx+1}. {s?.name ?? '—'}</div><div className="text-slate-400">{s?.ram}MB</div></div>;
+                })}
+              </div>
+            </div>
+
+          </aside>
+
+          <main className="col-span-8">
+            {!selectedServer ? (
+              <div className="bg-white rounded-2xl p-6 shadow-sm">Select a server to manage or create a new one.</div>
+            ) : (
+              <div className="bg-white rounded-2xl p-6 shadow-sm space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-lg font-semibold">{selectedServer.name}</div>
+                    <div className="text-xs text-slate-500">{selectedServer.version} · {selectedServer.ram} MB</div>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <div className="text-sm text-slate-600">Port: {selectedServer.port ?? '—'}</div>
+                    <button className="px-3 py-1 rounded-md border" onClick={() => toggleStartStop(selectedServer.id)}>
+                      {selectedServer.status === 'running' || selectedServer.status === 'starting' ? 'Stop' : selectedServer.status === 'queued' ? 'Cancel' : 'Start'}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="col-span-2">
+                    <Panel title="Console" className="h-72 flex flex-col">
+                      <ConsoleView server={selectedServer} onSend={(cmd) => sendConsoleCommand(selectedServer.id, cmd)} />
+                    </Panel>
+
+                    <div className="mt-4 flex gap-3">
+                      <button className="px-3 py-1 rounded-md bg-slate-100" onClick={() => createBackup(selectedServer.id)}>Create backup</button>
+                      <button className="px-3 py-1 rounded-md bg-slate-100" onClick={() => updateServer(selectedServer.id, { console: [...selectedServer.console, logLine('Saved world snapshot') ] })}>Snapshot</button>
+                      <button className="px-3 py-1 rounded-md bg-slate-100" onClick={() => updateServer(selectedServer.id, { console: [...selectedServer.console, logLine('Performed maintenance') ] })}>Maintenance</button>
+                    </div>
+
+                  </div>
+
+                  <div>
+                    <Panel title="Files & Backups" className="h-72 overflow-auto">
+                      <FileManager server={selectedServer} onSave={saveFile} onDownloadBackup={downloadBackup} onRestore={restoreBackup} />
+                    </Panel>
+                  </div>
+                </div>
+
+                <div>
+                  <Panel title="Server Settings">
+                    <div className="grid grid-cols-3 gap-3">
+                      <label className="text-sm">
+                        Name
+                        <input value={selectedServer.name} onChange={(e)=>updateServer(selectedServer.id,{name:e.target.value})} className="mt-1 w-full rounded-md border px-2 py-1" />
+                      </label>
+                      <label className="text-sm">
+                        RAM (MB)
+                        <input type="number" value={selectedServer.ram} onChange={(e)=>updateServer(selectedServer.id,{ram: Number(e.target.value)})} className="mt-1 w-full rounded-md border px-2 py-1" />
+                      </label>
+                      <label className="text-sm">
+                        Version
+                        <select value={selectedServer.version} onChange={(e)=>updateServer(selectedServer.id,{version:e.target.value})} className="mt-1 w-full rounded-md border px-2 py-1">
+                          <option>1.20.4</option>
+                          <option>1.19.4</option>
+                          <option>1.8.9</option>
+                        </select>
+                      </label>
+                    </div>
+                  </Panel>
+                </div>
+
+              </div>
+            )}
+          </main>
+        </div>
+
+        {/* Create modal */}
+        {creating && (
+          <div className="fixed inset-0 bg-black/30 flex items-center justify-center">
+            <div className="bg-white rounded-xl p-6 w-[420px]">
+              <h3 className="font-semibold mb-3">Create new server</h3>
+              <label className="text-sm">Name</label>
+              <input className="w-full mt-2 rounded-md border px-2 py-1" value={newName} onChange={(e)=>setNewName(e.target.value)} />
+              <div className="mt-4 flex justify-end gap-2">
+                <button className="px-3 py-1 rounded-md" onClick={()=>setCreating(false)}>Cancel</button>
+                <button className="px-3 py-1 rounded-md bg-indigo-600 text-white" onClick={createServer}>Create</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <footer className="mt-6 text-xs text-slate-500">Prototype — uses client-only simulation. For a production site you'd need a backend to orchestrate real servers.</footer>
+      </div>
+    </div>
+  );
+}
+
+// ---------- Helper components & utils ----------
+function Panel({ title, children, className = '' }) {
+  return (
+    <div className={`border rounded-xl p-3 bg-white ${className}`}>
+      <div className="flex items-center justify-between mb-3">
+        <div className="font-medium text-sm">{title}</div>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function ConsoleView({ server, onSend }) {
+  const [cmd, setCmd] = useState("");
+  const bottomRef = useRef();
+
+  useEffect(()=>{
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [server?.console?.length]);
+
+  return (
+    <div className="flex flex-col h-full">
+      <div className="flex-1 bg-black/90 text-white text-xs rounded-md p-2 overflow-auto font-mono">
+        {server?.console?.length === 0 && <div className="text-slate-400">Console empty. Start server to see logs.</div>}
+        {server?.console?.map((l, i) => <div key={i} className="whitespace-pre-wrap">{l}</div>)}
+        <div ref={bottomRef} />
+      </div>
+      <form onSubmit={(e)=>{e.preventDefault(); if(cmd.trim()){onSend(cmd); setCmd('');}}} className="mt-2 flex gap-2">
+        <input className="flex-1 rounded-md border px-2 py-1" value={cmd} onChange={(e)=>setCmd(e.target.value)} placeholder="Type command..." />
+        <button className="px-3 py-1 rounded-md bg-indigo-600 text-white" type="submit">Send</button>
+      </form>
+    </div>
+  );
+}
+
+function FileManager({ server, onSave, onDownloadBackup, onRestore }) {
+  const [selectedFile, setSelectedFile] = useState(Object.keys(server.files)[0] ?? null);
+  const [content, setContent] = useState(server.files[selectedFile] ?? "");
+
+  useEffect(()=>{
+    setSelectedFile(Object.keys(server.files)[0] ?? null);
+  }, [server.id]);
+
+  useEffect(()=>{
+    setContent(server.files[selectedFile] ?? "");
+  }, [selectedFile, server.files]);
+
+  return (
+    <div>
+      <div className="flex gap-2 mb-2">
+        <select value={selectedFile} onChange={(e)=>setSelectedFile(e.target.value)} className="rounded-md border px-2 py-1 text-sm">
+          {Object.keys(server.files).map((f)=>(<option key={f} value={f}>{f}</option>))}
+        </select>
+        <button className="px-2 py-1 rounded-md border text-sm" onClick={()=>{const nxt = prompt('New file name'); if(nxt){onSave(server.id, nxt, '')}}}>New</button>
+        <button className="px-2 py-1 rounded-md border text-sm" onClick={()=>{if(selectedFile) navigator.clipboard.writeText(server.files[selectedFile] ?? '')}}>Copy</button>
+      </div>
+      <textarea className="w-full h-36 rounded-md border p-2 font-mono text-xs" value={content} onChange={(e)=>setContent(e.target.value)} />
+      <div className="flex justify-between items-center mt-2">
+        <div className="text-xs text-slate-500">Backups: {server.backups.length}</div>
+        <div className="flex gap-2">
+          <button className="px-2 py-1 rounded-md border text-sm" onClick={()=>{if(selectedFile) onSave(server.id, selectedFile, content)}}>Save</button>
+          <button className="px-2 py-1 rounded-md border text-sm" onClick={()=>onDownloadBackup(server.id, server.backups[0]?.id)}>Download latest</button>
+        </div>
+      </div>
+
+      <div className="mt-2 text-xs">
+        {server.backups.map(b=> (
+          <div key={b.id} className="flex justify-between items-center border rounded-md p-2 my-1">
+            <div>
+              <div className="font-medium">{new Date(b.createdAt).toLocaleString()}</div>
+            </div>
+            <div className="flex gap-2">
+              <button className="px-2 py-1 rounded-md border text-sm" onClick={()=>onRestore(server.id, b.id)}>Restore</button>
+              <button className="px-2 py-1 rounded-md border text-sm" onClick={()=>onDownloadBackup(server.id, b.id)}>Download</button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ---------- Utilities ----------
+function assignPort() {
+  // simple deterministic port from random
+  return 20000 + Math.floor(Math.random() * 45000);
+}
+
+function loadServers() {
+  try {
+    const raw = localStorage.getItem('mini-servers-v1');
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return parsed;
+  } catch (e) { return []; }
+}
+
+function saveServers(arr) {
+  localStorage.setItem('mini-servers-v1', JSON.stringify(arr));
+}
+
+function cryptoRandomId() {
+  return Math.random().toString(36).slice(2, 10);
+}
+
+function statusColor(s) {
+  if (s === 'running') return 'bg-green-100 text-green-700';
+  if (s === 'starting') return 'bg-amber-100 text-amber-700';
+  if (s === 'queued') return 'bg-indigo-100 text-indigo-700';
+  if (s === 'stopped') return 'bg-slate-100 text-slate-700';
+  if (s === 'error') return 'bg-red-100 text-red-700';
+  return 'bg-slate-100 text-slate-700';
+}
+
+function defaultServerProperties(){
+  return `#Minecraft server properties\nmax-players=20\nlevel-name=world\nmotd=Welcome to mini-server\n`; 
+}
+
+function logLine(text){
+  return `[${new Date().toLocaleTimeString()}] ${text}`;
+}
