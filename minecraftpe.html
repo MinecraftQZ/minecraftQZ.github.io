@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Mini Minecraft (Bedrock-style) – HTML/JS</title>
+  <style>
+    html, body { height: 100%; margin: 0; overflow: hidden; background:#101418; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial;}
+    #ui { position: fixed; inset: 0; pointer-events: none; }
+    .topbar { position:absolute; left:12px; top:12px; background:rgba(0,0,0,.55); color:#e6edf3; border:1px solid rgba(255,255,255,.1); padding:10px 12px; border-radius:14px; pointer-events:auto; backdrop-filter: blur(6px);}
+    .topbar h1 { margin:0 0 6px 0; font-size:16px; font-weight:700; letter-spacing:.2px }
+    .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap }
+    .btn { pointer-events:auto; user-select:none; cursor:pointer; border-radius:12px; padding:6px 10px; background:#20262c; color:#e6edf3; border:1px solid #2b3239; font-size:13px }
+    .btn[aria-pressed="true"]{ outline:2px solid #67e8f9; }
+    .hint { font-size:12px; opacity:.8; margin-top:6px }
+    .crosshair{ position:absolute; left:50%; top:50%; width:18px; height:18px; transform:translate(-50%,-50%); opacity:.8;}
+    .crosshair:before, .crosshair:after{ content:""; position:absolute; background:#e6edf3; }
+    .crosshair:before{ left:50%; top:0; width:2px; height:100%; transform:translateX(-50%);} 
+    .crosshair:after{ top:50%; left:0; height:2px; width:100%; transform:translateY(-50%);} 
+    .toast { position:absolute; right:12px; bottom:12px; background:rgba(0,0,0,.6); color:#fff; border:1px solid rgba(255,255,255,.12); padding:10px 12px; border-radius:12px; font-size:13px; pointer-events:none; white-space:pre-line; }
+    canvas { display:block; }
+  </style>
+</head>
+<body>
+  <div id="ui">
+    <div class="topbar">
+      <h1>Mini Minecraft (Bedrock-style) – HTML/JS</h1>
+      <div class="row" id="blockButtons"></div>
+      <div class="hint">
+        คลิกที่ฉากเพื่อเริ่มเล่น (ล็อกเมาส์)<br/>
+        เดิน: W A S D • กระโดด: Space • ทำลายบล็อก: คลิกซ้าย • วางบล็อก: คลิกขวา • เลือกบล็อก: 1–5 • เซฟ/โหลดอัตโนมัติ
+      </div>
+    </div>
+    <div class="crosshair"></div>
+    <div id="toast" class="toast" style="display:none"></div>
+  </div>
+
+  <!-- Three.js -->
+  <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
+
+  <script>
+  // ====== Basic setup ======
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x87b3e0);
+  const camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 1000);
+  const renderer = new THREE.WebGLRenderer({ antialias:true });
+  renderer.setSize(innerWidth, innerHeight);
+  document.body.appendChild(renderer.domElement);
+
+  // Lighting
+  const sun = new THREE.DirectionalLight(0xffffff, 1.0);
+  sun.position.set(30, 100, 40);
+  scene.add(sun);
+  scene.add(new THREE.AmbientLight(0xffffff, 0.35));
+
+  // ====== Player / controls (pointer lock + simple physics) ======
+  const player = {
+    height: 1.7,
+    speed: 4.2,
+    sprint: 6.2,
+    jumpStrength: 5.8,
+    onGround: false,
+    vel: new THREE.Vector3()
+  };
+  const yaw = new THREE.Object3D();
+  const pitch = new THREE.Object3D();
+  yaw.add(pitch);
+  pitch.add(camera);
+  camera.position.set(0, player.height, 0);
+  scene.add(yaw);
+
+  let pointerLocked = false;
+  function lockPointer(){ renderer.domElement.requestPointerLock(); }
+  document.addEventListener('pointerlockchange',()=>{ pointerLocked = document.pointerLockElement === renderer.domElement; });
+  renderer.domElement.addEventListener('click', () => { if(!pointerLocked) lockPointer(); });
+
+  let sens = 0.0022;
+  window.addEventListener('mousemove', (e)=>{
+    if(!pointerLocked) return;
+    yaw.rotation.y -= e.movementX * sens;
+    pitch.rotation.x -= e.movementY * sens;
+    pitch.rotation.x = Math.max(-Math.PI/2, Math.min(Math.PI/2, pitch.rotation.x));
+  });
+
+  const keys = new Set();
+  window.addEventListener('keydown', e=>{ keys.add(e.code); if(e.code.startsWith('Digit')) selectBlock(parseInt(e.code.slice(5),10)); });
+  window.addEventListener('keyup', e=>{ keys.delete(e.code); });
+
+  // ====== World data & block system ======
+  const SIZE = 32; // world size (x,z) in blocks
+  const GROUND_Y = 1; // grass level
+
+  // Block types (id -> material/color)
+  const BLOCKS = [
+    { id:1, name:'Grass', color:0x6aaa64 },
+    { id:2, name:'Dirt',  color:0x8b5a2b },
+    { id:3, name:'Stone', color:0x9ea7ad },
+    { id:4, name:'Wood',  color:0x9c6b3d },
+    { id:5, name:'Bedrock', color:0x3a3a3a, unbreakable:true }
+  ];
+  let selectedId = 1;
+
+  const blockButtons = document.getElementById('blockButtons');
+  for(const b of BLOCKS){
+    const btn = document.createElement('button');
+    btn.className = 'btn';
+    btn.textContent = `${b.id}: ${b.name}`;
+    btn.setAttribute('data-id', b.id);
+    btn.onclick = () => selectBlock(b.id);
+    blockButtons.appendChild(btn);
+  }
+  function selectBlock(id){
+    if(!id || !BLOCKS.find(b=>b.id===id) || id===5) { // keep bedrock craftable? off by default
+      // allow selecting 1-4 only via digits; but still handle UI clicks
+    }
+    selectedId = Math.min(Math.max(1, id||selectedId), 4);
+    for(const el of blockButtons.children){ el.setAttribute('aria-pressed', el.getAttribute('data-id')==selectedId); }
+    showToast(`เลือกบล็อก: ${BLOCKS.find(b=>b.id===selectedId)?.name}`);
+  }
+  selectBlock(1);
+
+  // World storage: Map key "x,y,z" -> id
+  const world = new Map();
+  function K(x,y,z){ return `${x},${y},${z}`; }
+
+  // Build flat world with bedrock layer
+  function generateFlatWorld(){
+    for(let x= -SIZE/2; x< SIZE/2; x++){
+      for(let z= -SIZE/2; z< SIZE/2; z++){
+        world.set(K(x,0,z), 5); // bedrock
+        world.set(K(x,1,z), 1); // grass
+        world.set(K(x,2,z), 2); // a dirt cap for demo variety (optional)
+      }
+    }
+  }
+
+  // ====== Mesh generation using InstancedMesh per block type ======
+  const cubeGeo = new THREE.BoxGeometry(1,1,1);
+  const mats = Object.fromEntries(BLOCKS.map(b=>[b.id, new THREE.MeshStandardMaterial({ color:b.color })]));
+  const meshes = {}; // id -> InstancedMesh
+
+  function rebuildMeshes(){
+    // cleanup old
+    for(const id in meshes){ scene.remove(meshes[id]); meshes[id].geometry.dispose(); meshes[id].material.dispose?.(); }
+    for(const id in meshes){ delete meshes[id]; }
+
+    const counts = {};
+    for(const [key, id] of world){ counts[id] = (counts[id]||0)+1; }
+
+    for(const id of Object.keys(counts)){
+      const iid = Number(id);
+      const count = counts[id];
+      const inst = new THREE.InstancedMesh(cubeGeo, mats[iid], count);
+      inst.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      meshes[iid] = inst; scene.add(inst);
+    }
+
+    const temp = new THREE.Object3D();
+    const counters = {};
+    for(const [key, id] of world){
+      const [x,y,z] = key.split(',').map(Number);
+      const i = counters[id] = (counters[id]||0);
+      temp.position.set(x+0.5, y+0.5, z+0.5);
+      temp.updateMatrix();
+      meshes[id].setMatrixAt(i, temp.matrix);
+      counters[id]++;
+    }
+    for(const id in meshes){ meshes[id].computeBoundingSphere(); meshes[id].instanceMatrix.needsUpdate = true; }
+  }
+
+  // ====== Save/Load with localStorage ======
+  const SAVE_KEY = 'mini-mc-world-v1';
+  function saveWorld(){
+    try{
+      const arr = [];
+      for(const [k,v] of world){ arr.push([k,v]); }
+      localStorage.setItem(SAVE_KEY, JSON.stringify(arr));
+      showToast('บันทึกโลกแล้ว ✅');
+    }catch(err){ console.warn(err); showToast('บันทึกไม่สำเร็จ ❌'); }
+  }
+  function loadWorld(){
+    const raw = localStorage.getItem(SAVE_KEY);
+    if(raw){
+      world.clear();
+      for(const [k,v] of JSON.parse(raw)){ world.set(k,v); }
+      showToast('โหลดโลกจากที่บันทึกไว้แล้ว ⏫');
+    }else{
+      generateFlatWorld();
+      showToast('สร้างโลกใหม่ 🌍');
+    }
+    rebuildMeshes();
+  }
+
+  // Autosave on unload
+  window.addEventListener('beforeunload', saveWorld);
+
+  // ====== Raycast for place/break ======
+  const raycaster = new THREE.Raycaster();
+  const mouse = new THREE.Vector2(0,0); // center of screen
+  function getLookRay(){
+    raycaster.setFromCamera(mouse, camera);
+    const candidates = Object.values(meshes);
+    const hits = raycaster.intersectObjects(candidates, false);
+    return hits[0] || null;
+  }
+
+  function worldHas(x,y,z){ return world.has(K(x,y,z)); }
+  function setBlock(x,y,z,id){
+    if(id===0){ world.delete(K(x,y,z)); }
+    else{ world.set(K(x,y,z), id); }
+  }
+
+  // Break on left click, place on right click
+  window.addEventListener('contextmenu', e=> e.preventDefault());
+  window.addEventListener('mousedown', e=>{
+    if(!pointerLocked) return;
+    const hit = getLookRay();
+    if(!hit) return;
+    const p = hit.point.clone().add(hit.face.normal.clone().multiplyScalar(0.001));
+    const bp = hit.point.clone().add(hit.face.normal.clone().multiplyScalar(-0.001));
+    const target = new THREE.Vector3(Math.floor(bp.x), Math.floor(bp.y), Math.floor(bp.z));
+    const placeAt = new THREE.Vector3(Math.floor(p.x), Math.floor(p.y), Math.floor(p.z));
+
+    // determine which instanced block we hit by converting hit.instanceId back to position isn't trivial; use math with bp/p
+
+    if(e.button===0){
+      // break
+      const id = world.get(K(target.x, target.y, target.z));
+      if(id===5){ showToast('Bedrock ทำลายไม่ได้'); return; }
+      if(id){ setBlock(target.x, target.y, target.z, 0); rebuildMeshes(); }
+    } else if(e.button===2){
+      // place
+      // prevent placing inside player capsule
+      if(collisionAABB(placeAt.x+0.5, placeAt.y+0.5, placeAt.z+0.5, 0.5,0.5,0.5)) return;
+      setBlock(placeAt.x, placeAt.y, placeAt.z, selectedId);
+      rebuildMeshes();
+    }
+  });
+
+  // ====== Simple physics & collision with blocks (AABB capsule) ======
+  const GRAVITY = -12.0;
+  const CAP = { radius:0.3, height:1.7 };
+
+  function collisionAABB(cx,cy,cz, hx,hy,hz){
+    // Check overlap with player's bounding box
+    const minX = cx - hx, maxX = cx + hx;
+    const minY = cy - hy, maxY = cy + hy;
+    const minZ = cz - hz, maxZ = cz + hz;
+    const px = yaw.position.x, py = yaw.position.y + CAP.height/2, pz = yaw.position.z;
+    const pMinX = px - CAP.radius, pMaxX = px + CAP.radius;
+    const pMinY = yaw.position.y,  pMaxY = yaw.position.y + CAP.height;
+    const pMinZ = pz - CAP.radius, pMaxZ = pz + CAP.radius;
+    const overlap = !(pMaxX < minX || pMinX > maxX || pMaxY < minY || pMinY > maxY || pMaxZ < minZ || pMinZ > maxZ);
+    return overlap;
+  }
+
+  function resolveCollisions(){
+    // push player out of any solid block overlapping
+    const px = Math.floor(yaw.position.x);
+    const py = Math.floor(yaw.position.y);
+    const pz = Math.floor(yaw.position.z);
+    const candidates = [];
+    for(let x=px-1;x<=px+1;x++) for(let y=py-1;y<=py+2;y++) for(let z=pz-1;z<=pz+1;z++) if(worldHas(x,y,z)) candidates.push([x,y,z]);
+    for(const [x,y,z] of candidates){
+      // block AABB
+      const minX=x, maxX=x+1, minY=y, maxY=y+1, minZ=z, maxZ=z+1;
+      // player AABB
+      let pMinX = yaw.position.x - CAP.radius,
+          pMaxX = yaw.position.x + CAP.radius,
+          pMinY = yaw.position.y,
+          pMaxY = yaw.position.y + CAP.height,
+          pMinZ = yaw.position.z - CAP.radius,
+          pMaxZ = yaw.position.z + CAP.radius;
+      const overlap = !(pMaxX <= minX || pMinX >= maxX || pMaxY <= minY || pMinY >= maxY || pMaxZ <= minZ || pMinZ >= maxZ);
+      if(!overlap) continue;
+      // compute smallest push
+      const dx1 = maxX - pMinX, dx2 = pMaxX - minX;
+      const dz1 = maxZ - pMinZ, dz2 = pMaxZ - minZ;
+      const dy1 = maxY - pMinY, dy2 = pMaxY - minY;
+      const minPush = Math.min(dx1, dx2, dy1, dy2);
+      if(minPush === dy1){ yaw.position.y = maxY; player.vel.y = Math.max(0, player.vel.y); player.onGround = true; }
+      else if(minPush === dy2){ yaw.position.y = minY - CAP.height; player.vel.y = Math.min(0, player.vel.y); }
+      else if(minPush === dx1){ yaw.position.x = maxX + CAP.radius; }
+      else if(minPush === dx2){ yaw.position.x = minX - CAP.radius; }
+      else if(minPush === dz1){ yaw.position.z = maxZ + CAP.radius; }
+      else if(minPush === dz2){ yaw.position.z = minZ - CAP.radius; }
+    }
+  }
+
+  // ====== Game loop ======
+  let last = performance.now();
+  function loop(now){
+    requestAnimationFrame(loop);
+    const dt = Math.min(0.05, (now - last)/1000); // clamp for stability
+    last = now;
+
+    // movement input
+    const fwd = (keys.has('KeyW')?1:0) - (keys.has('KeyS')?1:0);
+    const str = (keys.has('KeyD')?1:0) - (keys.has('KeyA')?1:0);
+    const running = keys.has('ShiftLeft') || keys.has('ShiftRight');
+    const spd = running ? player.sprint : player.speed;
+
+    const dir = new THREE.Vector3();
+    const forward = new THREE.Vector3(0,0,-1).applyEuler(new THREE.Euler(0, yaw.rotation.y, 0));
+    const right = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0,1,0)).negate();
+    dir.addScaledVector(forward, fwd).addScaledVector(right, str);
+    if(dir.lengthSq()>0) dir.normalize();
+
+    // horizontal move
+    yaw.position.addScaledVector(dir, spd * dt);
+
+    // gravity + jump
+    player.vel.y += GRAVITY * dt;
+    if(player.onGround && keys.has('Space')){ player.vel.y = player.jumpStrength; player.onGround = false; }
+    yaw.position.y += player.vel.y * dt;
+
+    player.onGround = false; // will be set true in resolveCollisions if standing
+    resolveCollisions();
+
+    renderer.render(scene, camera);
+  }
+
+  // ====== Helpers/UI ======
+  const toast = document.getElementById('toast');
+  let toastTimer;
+  function showToast(msg){
+    toast.style.display = 'block';
+    toast.textContent = msg;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(()=> toast.style.display='none', 1600);
+  }
+
+  window.addEventListener('resize', ()=>{
+    camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+    renderer.setSize(innerWidth, innerHeight);
+  });
+
+  // Manual save key (Ctrl+S)
+  window.addEventListener('keydown', e=>{
+    if(e.ctrlKey && e.code==='KeyS'){ e.preventDefault(); saveWorld(); }
+  });
+
+  // Start
+  yaw.position.set(0, 4, 5);
+  loadWorld();
+  requestAnimationFrame(loop);
+
+  </script>
+</body>
+</html>
