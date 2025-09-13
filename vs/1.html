@@ -62,9 +62,9 @@
 <body>
 
 <div class="window">
-    <div class="title-bar">USB</div>
+    <div class="title-bar">USB 2</div>
     <div class="content">
-        <div class="download-text">USB (0.00%)</div>
+        <div class="download-text">USB2 (0.00%)</div>
         <div class="progress-container">
             <div class="progress-bar">0%</div>
         </div>
@@ -97,7 +97,7 @@
         const downloadText = document.querySelector(".download-text");
         progressBar.style.width = progress.toFixed(2) + "%";
         progressBar.textContent = progress.toFixed(0) + "%";
-        downloadText.textContent = `USB (${progress.toFixed(2)}%)`;
+        downloadText.textContent = `USB2 (${progress.toFixed(2)}%)`;
     }
 </script>
 
