@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Windows 10 Simulator</title>
+<title>USB</title>
 <style>
     body {
         margin: 0;
@@ -62,9 +62,9 @@
 <body>
 
 <div class="window">
-    <div class="title-bar">Windows 10 Downloader</div>
+    <div class="title-bar">USB</div>
     <div class="content">
-        <div class="download-text">Download Windows 10 (0.00%)</div>
+        <div class="download-text">USB (0.00%)</div>
         <div class="progress-container">
             <div class="progress-bar">0%</div>
         </div>
@@ -97,7 +97,7 @@
         const downloadText = document.querySelector(".download-text");
         progressBar.style.width = progress.toFixed(2) + "%";
         progressBar.textContent = progress.toFixed(0) + "%";
-        downloadText.textContent = `Download Windows 10 (${progress.toFixed(2)}%)`;
+        downloadText.textContent = `USB (${progress.toFixed(2)}%)`;
     }
 </script>
 
