@@ -1,34 +1,105 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Web VSCode + Bash + File Explorer</title>
-<link rel="stylesheet" href="style.css">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm/css/xterm.css" />
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Windows 10 Simulator</title>
+<style>
+    body {
+        margin: 0;
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        background: #0078D7; /* Windows 10 blue */
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+    }
+
+    .window {
+        width: 400px;
+        background: #F3F3F3;
+        border-radius: 6px;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+        overflow: hidden;
+        font-size: 14px;
+    }
+
+    .title-bar {
+        background: #0078D7;
+        color: white;
+        padding: 8px 12px;
+        font-weight: bold;
+    }
+
+    .content {
+        padding: 20px;
+    }
+
+    .progress-container {
+        background: #ddd;
+        border-radius: 5px;
+        overflow: hidden;
+        margin-top: 10px;
+        height: 20px;
+    }
+
+    .progress-bar {
+        height: 100%;
+        width: 0;
+        background: #00CC00;
+        text-align: center;
+        color: white;
+        line-height: 20px;
+        transition: width 0.2s;
+    }
+
+    .download-text {
+        margin-top: 10px;
+        font-weight: bold;
+    }
+</style>
 </head>
 <body>
-  <div id="app">
-    <div id="sidebar">
-      <h3>Files</h3>
-      <ul id="file-list"></ul>
-      <button id="new-file">New File</button>
-      <button id="open-file">Open File</button>
-      <button id="save-file">Save File</button>
-    </div>
-    <div id="main">
-      <div id="editor"></div>
-      <div id="terminal"></div>
-    </div>
-  </div>
 
-  <!-- Monaco Editor -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/loader.min.js"></script>
-  <!-- xterm.js -->
-  <script src="https://cdn.jsdelivr.net/npm/xterm/lib/xterm.js"></script>
-  <!-- fs helper -->
-  <script src="fs.js"></script>
-  <!-- main logic -->
-  <script src="main.js"></script>
+<div class="window">
+    <div class="title-bar">Windows 10 Downloader</div>
+    <div class="content">
+        <div class="download-text">Download Windows 10 (0.00%)</div>
+        <div class="progress-container">
+            <div class="progress-bar">0%</div>
+        </div>
+        <button onclick="startDownload()" style="margin-top: 15px; padding: 8px 12px;">Start Download</button>
+    </div>
+</div>
+
+<script>
+    let progress = 0;
+    let interval;
+
+    function startDownload() {
+        clearInterval(interval);
+        progress = 0;
+        updateUI();
+        interval = setInterval(() => {
+            if (progress < 100) {
+                progress += Math.random() * 5; // เพิ่มความสุ่มเหมือนดาวน์โหลดจริง
+                if (progress > 100) progress = 100;
+                updateUI();
+            } else {
+                clearInterval(interval);
+                alert("Download Complete!");
+            }
+        }, 500);
+    }
+
+    function updateUI() {
+        const progressBar = document.querySelector(".progress-bar");
+        const downloadText = document.querySelector(".download-text");
+        progressBar.style.width = progress.toFixed(2) + "%";
+        progressBar.textContent = progress.toFixed(0) + "%";
+        downloadText.textContent = `Download Windows 10 (${progress.toFixed(2)}%)`;
+    }
+</script>
+
 </body>
 </html>
