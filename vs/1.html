@@ -1,1 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>USB</title>
+<style>
+    body {
+        margin: 0;
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        background: #0078D7; /* Windows 10 blue */
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+    }
 
+    .window {
+        width: 400px;
+        background: #F3F3F3;
+        border-radius: 6px;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+        overflow: hidden;
+        font-size: 14px;
+    }
+
+    .title-bar {
+        background: #0078D7;
+        color: white;
+        padding: 8px 12px;
+        font-weight: bold;
+    }
+
+    .content {
+        padding: 20px;
+    }
+
+    .progress-container {
+        background: #ddd;
+        border-radius: 5px;
+        overflow: hidden;
+        margin-top: 10px;
+        height: 20px;
+    }
+
+    .progress-bar {
+        height: 100%;
+        width: 0;
+        background: #00CC00;
+        text-align: center;
+        color: white;
+        line-height: 20px;
+        transition: width 0.2s;
+    }
+
+    .download-text {
+        margin-top: 10px;
+        font-weight: bold;
+    }
+</style>
+</head>
+<body>
+
+<div class="window">
+    <div class="title-bar">USB</div>
+    <div class="content">
+        <div class="download-text">USB (0.00%)</div>
+        <div class="progress-container">
+            <div class="progress-bar">0%</div>
+        </div>
+        <button onclick="startDownload()" style="margin-top: 15px; padding: 8px 12px;">Start Download</button>
+    </div>
+</div>
+
+<script>
+    let progress = 0;
+    let interval;
+
+    function startDownload() {
+        clearInterval(interval);
+        progress = 0;
+        updateUI();
+        interval = setInterval(() => {
+            if (progress < 100) {
+                progress += Math.random() * 2; // เพิ่มความสุ่มเหมือนดาวน์โหลดจริง
+                if (progress > 100) progress = 100;
+                updateUI();
+            } else {
+                clearInterval(interval);
+                alert("Download Complete!");
+            }
+        }, 500);
+    }
+
+    function updateUI() {
+        const progressBar = document.querySelector(".progress-bar");
+        const downloadText = document.querySelector(".download-text");
+        progressBar.style.width = progress.toFixed(2) + "%";
+        progressBar.textContent = progress.toFixed(0) + "%";
+        downloadText.textContent = `USB (${progress.toFixed(2)}%)`;
+    }
+</script>
+
+</body>
+</html>
