@@ -1,18 +1,44 @@
 body, html {
-  margin: 0;
-  padding: 0;
-  height: 100%;
-  width: 100%;
-  overflow: hidden;
+  margin: 0; padding: 0; height: 100%; width: 100%;
   font-family: sans-serif;
-  background: #1e1e1e;
-  color: white;
+  background: #1e1e1e; color: white;
 }
 
-#container {
+#app {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  grid-template-rows: 100%;
+  height: 100%;
+}
+
+#sidebar {
+  background: #252526;
+  padding: 10px;
+  display: flex; flex-direction: column;
+  gap: 10px;
+}
+
+#file-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  flex: 1;
+  overflow-y: auto;
+}
+
+#file-list li {
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 3px;
+}
+
+#file-list li:hover {
+  background: #37373d;
+}
+
+#main {
   display: grid;
   grid-template-rows: 70% 30%;
-  height: 100%;
 }
 
 #editor {
